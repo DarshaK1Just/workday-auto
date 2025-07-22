@@ -66,7 +66,7 @@ step4:
 ### 3. Run the Application Bot
 
 ```bash
-python run_auto_apply.py
+python -m scripts.run_auto_apply
 ```
 
 ---
