@@ -157,16 +157,16 @@ async def fill_my_experience(page: Page, config: dict = CONFIG) -> bool:
                     await page.check(f"{base} input[name='currentlyWorkHere']")
                 except:
                     pass
-            await page.wait_for_timeout(20000)
+            await page.wait_for_timeout(2000)
 
             await page.fill(f"{base} input[data-automation-id='dateSectionMonth-input']", we["start_month"])
             await page.fill(f"{base} input[data-automation-id='dateSectionYear-input']", we["start_year"])
-            await page.wait_for_timeout(20000)
+            await page.wait_for_timeout(2000)
 
             if not we.get("currently_work_here", False):
                 await page.locator(f"{base} input[data-automation-id='dateSectionMonth-input']").nth(1).fill(we.get("end_month", ""))
                 await page.locator(f"{base} input[data-automation-id='dateSectionYear-input']").nth(1).fill(we.get("end_year", ""))
-                await page.wait_for_timeout(20000)
+                await page.wait_for_timeout(2000)
 
             await page.locator(
                 f"{base} div[data-automation-id='formField-roleDescription'] textarea"
