@@ -115,7 +115,6 @@
 from playwright.async_api import Page
 from utils.parser import CONFIG
 
-# ---------- helpers ----------
 async def section_exists(page: Page, section_id: str, idx: int) -> bool:
     return await page.locator(
         f"div[aria-labelledby='{section_id}-{idx}-panel']"
@@ -127,17 +126,14 @@ async def click_add(page: Page, section: str) -> None:
     ).click()
     await page.wait_for_timeout(500)
 
-# ---------- main ----------
 async def fill_my_experience(page: Page, config: dict = CONFIG) -> bool:
     try:
         print("\n💼 Step 2: My Experience")
 
-        # -------- remove old cards --------
         for btn in await page.get_by_role("button", name="Delete").all():
             await btn.click()
             await page.wait_for_timeout(300)
 
-        # -------- WORK EXPERIENCE --------
         for idx, we in enumerate(config["step2"]["work_experience"], start=1):
             if not await section_exists(page, "Work-Experience", idx):
                 await click_add(page, "Work-Experience")
@@ -173,7 +169,6 @@ async def fill_my_experience(page: Page, config: dict = CONFIG) -> bool:
             ).fill(we["description"])
             await page.wait_for_timeout(300)
 
-        # -------- EDUCATION --------
         for idx, edu in enumerate(config["step2"]["education"], start=1):
             if not await section_exists(page, "Education", idx):
                 await click_add(page, "Education")
@@ -195,14 +190,12 @@ async def fill_my_experience(page: Page, config: dict = CONFIG) -> bool:
             await page.locator(f"{base} [data-automation-id='formField-gradeAverage'] input").fill(edu["grade"])
             await page.wait_for_timeout(300)
 
-        # -------- RESUME --------
         await page.locator(
             '[data-automation-id="attachments-FileUpload"] input[type="file"]'
         ).set_input_files(config["step2"]["resume_path"])
         await page.wait_for_timeout(1000)
         print("📎 Resume uploaded.")
 
-        # -------- NEXT --------
         await page.click('button[data-automation-id="pageFooterNextButton"]')
         print("✅ Step 2 completed.")
         return True
