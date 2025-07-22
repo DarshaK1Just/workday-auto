@@ -1,0 +1,112 @@
+headless: false
+# email: "necem41440@mytaemin.com"
+email: "your550@gmail.com"
+password: "Workdaylab@144"
+# job_url: "https://gapinc.wd1.myworkdayjobs.com/GAPINC/job/05520-ON-280-Metro-Center/General-Manager---280-Metro-Center_R194654/"
+# job_url: "https://gapinc.wd1.myworkdayjobs.com/en-US/GAPINC/job/Sr-Analyst--Costing-Excellence--11-month-contract-_R193183?locationCountry=c4f78be1a8f14da0ab49ce1162348a5e"
+
+# job_url: "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/Senior-DevOps-Engineer_JR1997710"
+job_url: "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/Senior-Software-Architect--GPU-Networking_JR1998985"
+
+step1:
+  hear_about_us: ["Job Board", "Glassdoor"]
+  first_name: "Darshak"
+  last_name: "Patel"
+  address_line1: "Nalanda"
+  city: "Los Angeles"
+  state: "California"
+  postal_code: "90010"
+  country: "USA"
+  phone_type: "Home"
+  phone_number: "7759802006"
+  gm_employment: "No"
+
+# … existing keys …
+
+step2:
+  work_experience:
+    - job_title: "Software Engineer"
+      company: "Crest Data"
+      location: "Ahmedabad"
+      currently_work_here: true
+      start_month: "11"
+      start_year: "2023"
+      end_month: "10"
+      end_year: "2023"
+      description: "Working on data solutions and backend systems at Crest Data."
+
+    - job_title: "ML Engineer"
+      company: "Acme AI Labs"
+      location: "Pune"
+      currently_work_here: false
+      start_month: "06"
+      start_year: "2020"
+      end_month: "10"
+      end_year: "2023"
+      description: "Built production‑grade computer‑vision services."
+
+  education:
+    - school: "BITS – Hyderabad"
+      school_option: "BITS - Hyderabad"
+      degree: "BTECH"
+      field_of_study: "Accounting"
+      grade: "8.97"
+
+    - school: "IIT Bombay"
+      school_option: "Indian Institute of Technology, Bombay"
+      degree: "MTECH"
+      field_of_study: "Animation"
+      grade: "8.4"
+
+  language:
+    language: "English"
+    proficiency: "5 - Fluent"
+
+  resume_path: "data/resume.pdf"
+
+# step2:
+#   work_experience:
+#     job_title: "Software Engineer"
+#     company: "AI Data"
+#     location: "Ahmedabad"
+#     currently_work_here: true
+#     start_month: "11"
+#     start_year: "2023"
+#     description: "Working on data solutions and backend systems at AI Data."
+
+#   education:
+#     school: "BITS"
+#     school_option: "BITS - Hyderabad"
+#     # degree: "High School"
+#     degree: "BTECH"
+#     field_of_study: "Accounting"
+#     grade: "8.97"
+
+#   language:
+#     language: "English"
+#     proficiency: "5 - Fluent"
+
+#   resume_path: "data/resume.pdf"
+
+step3:
+  authorization: "Yes"
+  sponsorship: "No"
+
+step4:
+  ethnicity: "Asian (Not Hispanic or Latino) (United States of America)"
+  nationality: "India"
+  gender: "Male"
+  veteran_status: "I AM NOT A VETERAN"
+  consent: true
+
+step5:
+  language: "English"
+  name: "Darshak Kakani"
+  date:
+    month: "7"
+    day: "16"
+    year: "2025"
+  disability_status: "No, I do not have a disability and have not had one in the past"
+
+step6:
+  submit: true
