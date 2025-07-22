@@ -6,7 +6,7 @@ This project automates the process of applying to jobs on Workday-powered career
 
 ## 🚀 Features
 
-- ✅ **Automated Login** (optional MFA/SSO)
+- ✅ **Automated Login**
 - ✅ **"Apply Manually" Workflow**
 - ✅ **Multi-step Form Navigation:**
   - My Information
