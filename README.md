@@ -63,7 +63,7 @@ step4:
   consent: true
 ```
 
-### 3. Run the Application Bot
+### 3. Run the Application
 
 ```bash
 python main.py
