@@ -39,6 +39,18 @@ async def _navigate_and_load_page(page: Page, config: Dict[str, Any]) -> bool:
     except Exception as e:
         logging.error(f"❌ Cannot load job page: {e}")
         return False
+    
+async def _accept_cookies_if_present(page: Page) -> None:
+    """Clicks 'Accept Cookies' button if cookie banner is shown."""
+    try:
+        await page.wait_for_timeout(1000)
+        accept_button = page.locator('button[data-automation-id="legalNoticeAcceptButton"]')
+        if await accept_button.is_visible(timeout=3000):
+            logging.info("🍪 Accepting cookies …")
+            await accept_button.click()
+            await page.wait_for_timeout(1000)
+    except Exception as e:
+        logging.debug(f"⚠️ Cookie acceptance skipped or failed: {e}")
 
 
 async def _click_initial_sign_in(page: Page) -> bool:
@@ -194,6 +206,9 @@ async def login_to_workday(page: Page, config: Dict[str, Any] = CONFIG) -> bool:
     # Step 1: Navigate to job page
     if not await _navigate_and_load_page(page, config):
         return False
+    
+    # Step 1.1: Accept cookies if banner appears
+    await _accept_cookies_if_present(page)
 
     # Step 2: Click initial Sign In button
     if not await _click_initial_sign_in(page):
