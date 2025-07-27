@@ -1,10 +1,5 @@
 """
-This module provides functions to extract form field data from Workday job application pages.
-Combines best practices from the first sample with exact reference patterns from the second sample.
-
-It uses Playwright to interact with the page and extract information about various
-form fields like text inputs, dropdowns, checkboxes, radio buttons, and multi-select fields.
-The extracted data is structured into a consistent format for further processing.
+Improved form extraction module that properly handles dynamic sections like Work Experience.
 """
 
 import logging
@@ -15,7 +10,6 @@ from playwright.async_api import Locator, Page
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- Type Definitions ---
 class FormField(TypedDict):
     """A dictionary representing a single form field."""
     label: str
@@ -24,23 +18,23 @@ class FormField(TypedDict):
     type_of_input: str
     options: List[str]
     user_data_select_values: List[str]
+    section_name: str  # Added to track which section this field belongs to
 
-# --- Constants for Selectors ---
+# Constants
 FORM_FIELD_SELECTOR = '[data-automation-id^="formField-"]'
-PROGRESS_BAR_SELECTOR = '[data-automation-id^="progressBar"] li'
 MULTI_SELECT_CONTAINER_SELECTOR = '[data-automation-id="multiSelectContainer"]'
-DROPDOWN_BUTTON_SELECTOR = '[data-automation-id="dropdownButton"]'
-PICKLIST_OPTION_SELECTOR = '[data-automation-id="picklistOption"]'
-PILL_SELECTOR = '[data-automation-id="pill"]'
+PILL_SELECTOR = '[data-automation-id="selectedItem"]'
+PROMPT_OPTION_SELECTOR = '[data-automation-id="promptOption"]'
+ACTIVE_LIST_CONTAINER = '[data-automation-id="activeListContainer"]'
 DROPDOWN_TRIGGER_SELECTOR = 'button[aria-haspopup="listbox"]'
+ADD_BUTTON_SELECTOR = '[data-automation-id="add-button"]'
 
-# --- Timeout Constants ---
+# Timeout constants
 TIMEOUTS = {
     "element_wait": 2000,
     "animation_wait": 500,
     "page_wait": 3000
 }
-
 
 async def get_form_field_containers(page: Page) -> List[Locator]:
     """Gets all form field container elements from the page."""
@@ -55,7 +49,7 @@ async def extract_application_steps(page: Page) -> List[Dict[str, Any]]:
     """Extracts the application steps from the progress bar."""
     steps_data = []
     try:
-        progress_items = await page.locator(PROGRESS_BAR_SELECTOR).all()
+        progress_items = await page.locator('[data-automation-id^="progressBar"] li').all()
         for item in progress_items:
             label_el = item.locator('label').nth(1)
             step_name = await label_el.inner_text()
@@ -68,125 +62,573 @@ async def extract_application_steps(page: Page) -> List[Dict[str, Any]]:
         logging.error(f"[Step Extractor] Error: {e}")
     return steps_data
 
-
-async def extract_all_form_fields(page: Page) -> List[FormField]:
-    """Extracts all supported form fields from the current page."""
+async def extract_all_form_fields(page: Page, exclude_dynamic_sections: bool = False) -> List[FormField]:
+    """
+    Extracts all supported form fields from the current page.
+    
+    Args:
+        page: Playwright page object
+        exclude_dynamic_sections: If True, skips dynamic section extraction to avoid recursion
+    """
     all_results: List[FormField] = []
     seen_labels: Set[str] = set()
 
-    # Define extractors in order of priority
-    extractors: List[Callable[[Page], Coroutine[Any, Any, List[FormField]]]] = [
+    # Define extractors - removed dynamic sections from main flow
+    base_extractors: List[Callable[[Page], Coroutine[Any, Any, List[FormField]]]] = [
         extract_multiselect_fields,
         extract_radio_fields,
         extract_button_dropdown_fields,
         extract_text_fields,
-        extract_checkbox_fields
+        extract_checkbox_fields,
+        extract_textarea_fields,  # Added for role descriptions
+        extract_date_fields,      # Added for start/end dates
+        extract_file_upload_fields  # Added for resume/CV uploads
     ]
 
-    for extractor in extractors:
+    # Run base extractors
+    for extractor in base_extractors:
         try:
             fields = await extractor(page)
             for field in fields:
-                if field["label"] not in seen_labels:
+                field_key = f"{field['label']}_{field['id_of_input_component']}"
+                if field_key not in seen_labels:
                     all_results.append(field)
-                    seen_labels.add(field["label"])
+                    seen_labels.add(field_key)
         except Exception as e:
             logging.error(f"Error in extractor {extractor.__name__}: {e}")
 
+    # Handle dynamic sections separately
+    if not exclude_dynamic_sections:
+        try:
+            dynamic_fields = await extract_dynamic_section_fields(page)
+            for field in dynamic_fields:
+                field_key = f"{field['label']}_{field['id_of_input_component']}"
+                if field_key not in seen_labels:
+                    all_results.append(field)
+                    seen_labels.add(field_key)
+        except Exception as e:
+            logging.error(f"Error in dynamic section extraction: {e}")
+
     return all_results
 
+async def extract_dynamic_section_fields(page: Page) -> List[FormField]:
+    """
+    Clicks 'Add' in dynamic sections and extracts nested fields.
+    Avoids recursion by calling base extractors directly.
+    """
+    sectioned_results: List[FormField] = []
 
-async def extract_multiselect_fields(page: Page) -> List[FormField]:
-    """Extracts data from multi-select dropdown fields."""
+    try:
+        # Get all section headers
+        section_headers = await page.locator("h3[id$='-section']").all()
+
+        for header in section_headers:
+            try:
+                section_id = await header.get_attribute("id")
+                section_title = (await header.inner_text()).strip()
+                logging.info(f"[{section_title}] Processing section...")
+
+                if not section_id:
+                    continue
+
+                # Find section container
+                section_container = page.locator(f'div[role="group"][aria-labelledby="{section_id}"]')
+                if await section_container.count() == 0:
+                    continue
+
+                # Click Add button if present
+                add_button = section_container.locator(ADD_BUTTON_SELECTOR)
+                if await add_button.count() > 0:
+                    await add_button.click()
+                    await page.wait_for_timeout(TIMEOUTS["animation_wait"])
+
+                    # Wait for new fields to appear
+                    await page.wait_for_selector(FORM_FIELD_SELECTOR, timeout=5000)
+
+                    # Extract fields specifically from this section
+                    section_fields = await extract_section_specific_fields(page, section_container, section_title)
+                    sectioned_results.extend(section_fields)
+                    
+                    logging.info(f"[{section_title}] Extracted {len(section_fields)} fields")
+
+            except Exception as e:
+                logging.error(f"[{section_title}] Error: {e}")
+
+    except Exception as e:
+        logging.error(f"[extract_dynamic_section_fields] Error: {e}")
+
+    return sectioned_results
+
+async def extract_section_specific_fields(page: Page, section_container: Locator, section_name: str) -> List[FormField]:
+    """
+    Extract fields specifically from within a section container.
+    """
+    fields: List[FormField] = []
+    
+    try:
+        # Get form fields within this section
+        form_fields = await section_container.locator(FORM_FIELD_SELECTOR).all()
+        
+        for container in form_fields:
+            # Try different field types
+            field = None
+            
+            # Text inputs
+            text_input = container.locator('input[type="text"]')
+            if await text_input.count() > 0:
+                field = await extract_single_text_field(container, text_input)
+            
+            # Checkboxes
+            if not field:
+                checkbox = container.locator('input[type="checkbox"]')
+                if await checkbox.count() > 0:
+                    field = await extract_single_checkbox_field(container, checkbox)
+            
+            # Textareas
+            if not field:
+                textarea = container.locator('textarea')
+                if await textarea.count() > 0:
+                    field = await extract_single_textarea_field(container, textarea)
+            
+            # Date fields (complex date pickers)
+            if not field:
+                date_input = container.locator('input[role="spinbutton"]')
+                if await date_input.count() > 0:
+                    field = await extract_single_date_field(container)
+            
+            # File upload fields
+            if not field:
+                file_upload = container.locator('[data-automation-id="attachments-FileUpload"]')
+                if await file_upload.count() > 0:
+                    field = await extract_single_file_upload_field(container, file_upload)
+            
+            if field:
+                field["section_name"] = section_name
+                fields.append(field)
+                
+    except Exception as e:
+        logging.error(f"Error extracting section fields: {e}")
+    
+    return fields
+
+async def extract_single_text_field(container: Locator, input_el: Locator) -> FormField:
+    """Extract a single text field."""
+    input_id = await input_el.get_attribute("id")
+    input_value = await input_el.input_value()
+    
+    # Extract label
+    label_el = container.locator(f'label[for="{input_id}"]')
+    label_text = await label_el.inner_text() if await label_el.count() > 0 else "Unknown"
+    label = label_text.replace("*", "").strip()
+    is_required = '*' in label_text or await input_el.get_attribute("aria-required") == 'true'
+    
+    return {
+        "label": label,
+        "id_of_input_component": input_id,
+        "required": is_required,
+        "type_of_input": "text",
+        "options": [],
+        "user_data_select_values": [input_value] if input_value else [],
+        "section_name": ""
+    }
+
+
+async def extract_single_file_upload_field(container: Locator, file_upload_el: Locator) -> FormField:
+    """Extract a single file upload field."""
+    # Get the aria-labelledby attribute to find the label
+    label_id = await file_upload_el.get_attribute("aria-labelledby")
+    
+    # Find the label element
+    if label_id:
+        label_el = container.locator(f'#{label_id}')
+        label_text = await label_el.inner_text() if await label_el.count() > 0 else "File Upload"
+    else:
+        # Fallback: look for label in container
+        label_el = container.locator('label')
+        label_text = await label_el.inner_text() if await label_el.count() > 0 else "File Upload"
+    
+    label = label_text.replace("*", "").strip()
+    is_required = "*" in label_text
+    
+    # Get the file input element
+    file_input = file_upload_el.locator('input[type="file"]')
+    input_id = await file_input.get_attribute("id") if await file_input.count() > 0 else "unknown"
+    
+    # Get the select files button ID as backup
+    select_button = file_upload_el.locator('[data-automation-id="select-files"]')
+    if not input_id and await select_button.count() > 0:
+        input_id = await select_button.get_attribute("id")
+    
+    # Check if multiple files are accepted
+    multiple = await file_input.get_attribute("multiple") if await file_input.count() > 0 else None
+    upload_type = "multiple-file" if multiple is not None else "single-file"
+    
+    # Check for existing uploaded files
+    uploaded_files = []
+    file_items = await file_upload_el.locator('[data-automation-id*="file-item"], .uploaded-file, .file-name').all()
+    for file_item in file_items:
+        try:
+            file_name = await file_item.inner_text()
+            if file_name.strip():
+                uploaded_files.append(file_name.strip())
+        except:
+            continue
+    
+    return {
+        "label": label,
+        "id_of_input_component": input_id or "unknown",
+        "required": is_required,
+        "type_of_input": upload_type,
+        "options": ["Select file", "Drop file"],
+        "user_data_select_values": uploaded_files,
+        "section_name": ""
+    }
+
+async def extract_single_checkbox_field(container: Locator, input_el: Locator) -> FormField:
+    """Extract a single checkbox field."""
+    input_id = await input_el.get_attribute("id")
+    is_checked = await input_el.is_checked()
+    
+    # Extract label
+    label_el = container.locator(f'label[for="{input_id}"]')
+    label_text = await label_el.inner_text() if await label_el.count() > 0 else "Unknown"
+    label = label_text.replace("*", "").strip()
+    is_required = '*' in label_text or await input_el.get_attribute("aria-required") == 'true'
+    
+    return {
+        "label": label,
+        "id_of_input_component": input_id,
+        "required": is_required,
+        "type_of_input": "checkbox",
+        "options": ["Yes", "No"],
+        "user_data_select_values": ["Yes" if is_checked else "No"],
+        "section_name": ""
+    }
+
+async def extract_single_textarea_field(container: Locator, textarea_el: Locator) -> FormField:
+    """Extract a single textarea field."""
+    input_id = await textarea_el.get_attribute("id")
+    input_value = await textarea_el.input_value()
+    
+    # Extract label
+    label_el = container.locator(f'label[for="{input_id}"]')
+    label_text = await label_el.inner_text() if await label_el.count() > 0 else "Unknown"
+    label = label_text.replace("*", "").strip()
+    is_required = '*' in label_text or await textarea_el.get_attribute("aria-required") == 'true'
+    
+    return {
+        "label": label,
+        "id_of_input_component": input_id,
+        "required": is_required,
+        "type_of_input": "textarea",
+        "options": [],
+        "user_data_select_values": [input_value] if input_value else [],
+        "section_name": ""
+    }
+
+async def extract_single_date_field(container: Locator) -> FormField:
+    """Extract a single date field (MM/YYYY format)."""
+    # Look for the fieldset containing the date inputs
+    fieldset = container.locator('fieldset')
+    if await fieldset.count() == 0:
+        return None
+    
+    # Get label from legend
+    legend_label = fieldset.locator('legend label')
+    label_text = await legend_label.inner_text() if await legend_label.count() > 0 else "Date"
+    label = label_text.replace("*", "").strip()
+    is_required = '*' in label_text
+    
+    # Get the date wrapper ID
+    date_wrapper = fieldset.locator('[data-automation-id="dateInputWrapper"]')
+    wrapper_id = await date_wrapper.get_attribute("id") if await date_wrapper.count() > 0 else "unknown"
+    
+    # Get current values
+    month_input = fieldset.locator('input[aria-label="Month"]')
+    year_input = fieldset.locator('input[aria-label="Year"]')
+    
+    month_value = await month_input.input_value() if await month_input.count() > 0 else ""
+    year_value = await year_input.input_value() if await year_input.count() > 0 else ""
+    
+    current_value = f"{month_value}/{year_value}" if month_value and year_value else ""
+    
+    return {
+        "label": label,
+        "id_of_input_component": wrapper_id,
+        "required": is_required,
+        "type_of_input": "date",
+        "options": [],
+        "user_data_select_values": [current_value] if current_value else [],
+        "section_name": ""
+    }
+
+# Implement the missing base extractors
+async def extract_textarea_fields(page: Page) -> List[FormField]:
+    """Extract textarea fields."""
     results: List[FormField] = []
     
     try:
-        containers = await page.locator(MULTI_SELECT_CONTAINER_SELECTOR).all()
+        containers = await page.locator(FORM_FIELD_SELECTOR).all()
+        for container in containers:
+            textarea = container.locator('textarea')
+            if await textarea.count() > 0:
+                field = await extract_single_textarea_field(container, textarea)
+                if field:
+                    field["section_name"] = "main"
+                    results.append(field)
+    except Exception as e:
+        logging.error(f"Error extracting textarea fields: {e}")
+    
+    return results
+
+
+async def extract_file_upload_fields(page: Page) -> List[FormField]:
+    """Extract file upload fields (like Resume/CV uploads)."""
+    results: List[FormField] = []
+    
+    try:
+        # Look for file upload containers
+        file_upload_containers = await page.locator('[data-automation-id="attachments-FileUpload"]').all()
+        
+        for idx, container in enumerate(file_upload_containers):
+            try:
+                # Get the aria-labelledby attribute to find the label
+                label_id = await container.get_attribute("aria-labelledby")
+                
+                # Find the label element
+                if label_id:
+                    label_el = page.locator(f'#{label_id}')
+                    label_text = await label_el.inner_text() if await label_el.count() > 0 else "File Upload"
+                else:
+                    # Fallback: look for label in parent container
+                    parent_container = container.locator('xpath=ancestor::div[contains(@data-automation-id, "formField")]')
+                    label_el = parent_container.locator('label')
+                    label_text = await label_el.inner_text() if await label_el.count() > 0 else "File Upload"
+                
+                label = label_text.replace("*", "").strip()
+                is_required = "*" in label_text
+                
+                # Get the file input element
+                file_input = container.locator('input[type="file"]')
+                input_id = await file_input.get_attribute("id") if await file_input.count() > 0 else f"file-upload-{idx}"
+                
+                # Get the select files button ID as backup
+                select_button = container.locator('[data-automation-id="select-files"]')
+                if not input_id and await select_button.count() > 0:
+                    input_id = await select_button.get_attribute("id")
+                
+                # Check if multiple files are accepted
+                multiple = await file_input.get_attribute("multiple") if await file_input.count() > 0 else None
+                upload_type = "multiple-file" if multiple is not None else "single-file"
+                
+                # Check for existing uploaded files (if any)
+                uploaded_files = []
+                # Look for uploaded file indicators - this might need adjustment based on actual DOM
+                file_items = await container.locator('[data-automation-id*="file-item"], .uploaded-file, .file-name').all()
+                for file_item in file_items:
+                    try:
+                        file_name = await file_item.inner_text()
+                        if file_name.strip():
+                            uploaded_files.append(file_name.strip())
+                    except:
+                        continue
+                
+                results.append({
+                    "label": label,
+                    "id_of_input_component": input_id or f"file-upload-{idx}",
+                    "required": is_required,
+                    "type_of_input": upload_type,
+                    "options": ["Select file", "Drop file"],  # Available actions
+                    "user_data_select_values": uploaded_files,  # Currently uploaded files
+                    "section_name": "main"
+                })
+                
+            except Exception as e:
+                logging.error(f"[File Upload #{idx}] Error: {e}")
+                continue
+                
+    except Exception as e:
+        logging.error(f"Error extracting file upload fields: {e}")
+    
+    return results
+
+
+async def extract_all_steps_sequentially(page: Page) -> Dict[str, List[FormField]]:
+    """
+    Extracts all form fields from each step of the application process sequentially.
+    
+    Args:
+        page: The Playwright Page object
+        
+    Returns:
+        Dictionary mapping step names to their form fields
+    """
+    # Wait for page to stabilize
+    await page.wait_for_timeout(3000)  # 3 second wait for page stability
+
+    try:
+        steps = await extract_application_steps(page)
+        all_step_data: Dict[str, List[FormField]] = {}
+
+        for step in steps:
+            step_name = step["step_name"]
+            is_current = step["is_current_step"]
+            logging.info(f"[STEP] Found: {step_name} | Current: {is_current}")
+
+            if is_current:
+                logging.info(f"→ Extracting data for current step: {step_name}")
+                form_data = await extract_all_form_fields(page)
+                all_step_data[step_name] = form_data
+                logging.info(f"→ Extracted {len(form_data)} fields from step: {step_name}")
+            else:
+                all_step_data[step_name] = []
+
+        return all_step_data
+    except Exception as e:
+        logging.error(f"Error in extract_all_steps_sequentially: {e}")
+        return {}
+
+async def extract_date_fields(page: Page) -> List[FormField]:
+    """Extract date fields."""
+    results: List[FormField] = []
+    
+    try:
+        containers = await page.locator(FORM_FIELD_SELECTOR).all()
+        for container in containers:
+            date_input = container.locator('input[role="spinbutton"]')
+            if await date_input.count() > 0:
+                field = await extract_single_date_field(container)
+                if field:
+                    field["section_name"] = "main"
+                    results.append(field)
+    except Exception as e:
+        logging.error(f"Error extracting date fields: {e}")
+    
+    return results
+
+# Keep your existing extractors (multiselect, radio, button_dropdown, text, checkbox)
+# but add section_name to each field
+
+async def extract_multiselect_fields(page: Page) -> List[FormField]:
+    """Extracts all multi-select fields from the current form page."""
+    results: List[FormField] = []
+
+    try:
+        containers = await page.locator(MULTI_SELECT_CONTAINER_SELECTOR).first.all()
+
         for idx, container in enumerate(containers):
             try:
-                input_id = await container.get_attribute("id")
-                
-                # Extract label using xpath - following reference pattern
+                input_id = await container.get_attribute("id") or f"multiSelect-{idx}"
+
+                # Label
                 label_el = container.locator('xpath=ancestor::div[contains(@data-automation-id, "formField")]/label')
                 label_text = await label_el.inner_text() if await label_el.count() > 0 else "Unknown"
                 label = label_text.replace("*", "").strip()
-                is_required = '*' in label_text or await container.get_attribute("aria-required") == 'true'
-                
-                # Get selected values using pill selector
+                is_required = "*" in label_text or await container.get_attribute("aria-required") == "true"
+
+                # Selected values (pills)
                 selected_values = await container.locator(PILL_SELECTOR).all_inner_texts()
 
-                # Extract all available options by clicking dropdown
-                all_options = []
-                dropdown_button = container.locator(DROPDOWN_BUTTON_SELECTOR)
-                if await dropdown_button.count() > 0:
-                    await dropdown_button.click()
-                    await page.wait_for_selector(PICKLIST_OPTION_SELECTOR, timeout=TIMEOUTS["element_wait"])
-                    await page.wait_for_timeout(TIMEOUTS["animation_wait"])  # Wait for animation
-                    all_options = await page.locator(PICKLIST_OPTION_SELECTOR).all_inner_texts()
-                    await dropdown_button.click()  # Close dropdown
+                # Trigger dropdown
+                input_box = container.locator("input")
+                if await input_box.count() == 0:
+                    continue
+
+                await input_box.first.scroll_into_view_if_needed()
+                await input_box.first.click()
+                await page.wait_for_timeout(300)
+
+                # Wait for dropdown
+                try:
+                    await page.wait_for_selector(ACTIVE_LIST_CONTAINER, timeout=5000)
+                except TimeoutError:
+                    continue
+
+                # Get options
+                active_list = page.locator(ACTIVE_LIST_CONTAINER)
+                prompt_options = active_list.locator(PROMPT_OPTION_SELECTOR)
+                option_elements = await prompt_options.element_handles()
+
+                options: List[str] = []
+                for el in option_elements:
+                    sub_texts = await el.eval_on_selector_all("*", "els => els.map(e => e.innerText.trim()).filter(Boolean)")
+                    text = " ".join(sub_texts).strip()
+                    if not text:
+                        text = (await el.inner_text()).strip()
+                    options.append(text)
+
+                # Close dropdown
+                await input_box.first.press("Tab")
 
                 results.append({
                     "label": label,
                     "id_of_input_component": input_id,
                     "required": is_required,
                     "type_of_input": "multi-select",
-                    "options": all_options,
-                    "user_data_select_values": selected_values
+                    "options": options,
+                    "user_data_select_values": selected_values,
+                    "section_name": "main"
                 })
+
             except Exception as e:
                 logging.error(f"[MultiSelect #{idx}] Error: {e}")
-    except Exception as e:
-        logging.error(f"Error extracting multiselect fields: {e}")
-    
-    return results
 
+    except Exception as e:
+        logging.error(f"[MultiSelect] Error: {e}")
+
+    return results
 
 async def extract_radio_fields(page: Page) -> List[FormField]:
     """Extracts data from radio button groups."""
     results: List[FormField] = []
-    
+
     try:
         fieldsets = await page.locator("fieldset").all()
         for idx, fieldset in enumerate(fieldsets):
             try:
-                # Extract legend label
+                # Get label from <legend><label>
                 label_el = fieldset.locator("legend label")
                 label_text = await label_el.inner_text() if await label_el.count() > 0 else "Unknown"
                 label = label_text.replace("*", "").strip()
                 is_required = '*' in label_text or await fieldset.get_attribute("aria-required") == 'true'
-                
+
+                # Extract input container ID
+                input_container = fieldset.locator("div[aria-labelledby]")
+                input_id = await input_container.get_attribute("id")
+                input_id = input_id or await input_container.get_attribute("data-fkit-id") or "unknown"
+
                 # Extract radio options
                 radio_items = fieldset.locator('input[type="radio"]')
                 options: List[str] = []
                 selected_values: List[str] = []
-                
+
                 for i in range(await radio_items.count()):
                     radio = radio_items.nth(i)
                     value = await radio.get_attribute("value")
-                    input_id = await radio.get_attribute("id")
-                    
-                    # Get label for radio button - following reference pattern
-                    label_for_radio = page.locator(f'label[for="{input_id}"]')
-                    label_text = await label_for_radio.inner_text() if await label_for_radio.count() > 0 else value
-                    options.append(label_text)
-                    
-                    # Check if selected - using reference pattern
-                    if await radio.get_attribute("checked") == "true":
-                        selected_values.append(label_text)
+                    radio_id = await radio.get_attribute("id")
+
+                    label_for_radio = page.locator(f'label[for="{radio_id}"]')
+                    option_text = await label_for_radio.inner_text() if await label_for_radio.count() > 0 else value
+                    options.append(option_text)
+
+                    # Check if selected
+                    if await radio.get_attribute("checked") == "true" or await radio.get_attribute("aria-checked") == "true":
+                        selected_values.append(option_text)
 
                 results.append({
                     "label": label,
-                    "id_of_input_component": await fieldset.get_attribute("id"),
+                    "id_of_input_component": input_id,
                     "required": is_required,
                     "type_of_input": "radio",
                     "options": options,
-                    "user_data_select_values": selected_values
+                    "user_data_select_values": selected_values,
+                    "section_name": "main"
                 })
             except Exception as e:
                 logging.error(f"[Radio #{idx}] Error: {e}")
     except Exception as e:
         logging.error(f"Error extracting radio fields: {e}")
-    
+
     return results
 
 
@@ -195,7 +637,7 @@ async def extract_button_dropdown_fields(page: Page) -> List[FormField]:
     results: List[FormField] = []
     
     try:
-        containers = await get_form_field_containers(page)
+        containers = await page.locator(FORM_FIELD_SELECTOR).all()
         for idx, container in enumerate(containers):
             try:
                 # Use reference pattern for button selector
@@ -225,7 +667,8 @@ async def extract_button_dropdown_fields(page: Page) -> List[FormField]:
                     "required": is_required,
                     "type_of_input": "dropdown-button",
                     "options": options,
-                    "user_data_select_values": [selected_label] if selected_label else []
+                    "user_data_select_values": [selected_label] if selected_label else [],
+                    "section_name": "main"
                 })
             except Exception as e:
                 logging.error(f"[Dropdown Button #{idx}] Error: {e}")
@@ -240,7 +683,7 @@ async def extract_text_fields(page: Page) -> List[FormField]:
     results: List[FormField] = []
     
     try:
-        containers = await get_form_field_containers(page)
+        containers = await page.locator(FORM_FIELD_SELECTOR).all()
         for idx, container in enumerate(containers):
             try:
                 input_el = container.locator('input[type="text"]')
@@ -262,7 +705,8 @@ async def extract_text_fields(page: Page) -> List[FormField]:
                     "required": is_required,
                     "type_of_input": "text",
                     "options": [],
-                    "user_data_select_values": [input_value]
+                    "user_data_select_values": [input_value] if input_value else [],
+                    "section_name": "main"
                 })
             except Exception as e:
                 logging.error(f"[Text Field #{idx}] Error: {e}")
@@ -277,7 +721,7 @@ async def extract_checkbox_fields(page: Page) -> List[FormField]:
     results: List[FormField] = []
     
     try:
-        containers = await get_form_field_containers(page)
+        containers = await page.locator(FORM_FIELD_SELECTOR).all()
         for idx, container in enumerate(containers):
             try:
                 input_el = container.locator('input[type="checkbox"]')
@@ -301,7 +745,8 @@ async def extract_checkbox_fields(page: Page) -> List[FormField]:
                     "required": is_required,
                     "type_of_input": "checkbox",
                     "options": ["Yes", "No"],
-                    "user_data_select_values": ["Yes" if is_checked else "No"]
+                    "user_data_select_values": ["Yes" if is_checked else "No"],
+                    "section_name": "main"
                 })
             except Exception as e:
                 logging.error(f"[Checkbox #{idx}] Error: {e}")
@@ -309,77 +754,3 @@ async def extract_checkbox_fields(page: Page) -> List[FormField]:
         logging.error(f"Error extracting checkbox fields: {e}")
     
     return results
-
-
-async def extract_all_steps_sequentially(page: Page) -> Dict[str, List[FormField]]:
-    """
-    Extracts all form fields from each step of the application process sequentially.
-    
-    Args:
-        page: The Playwright Page object
-        
-    Returns:
-        Dictionary mapping step names to their form fields
-    """
-    # Wait for page to stabilize - using reference timeout value
-    await page.wait_for_timeout(TIMEOUTS["page_wait"])
-
-    try:
-        steps = await extract_application_steps(page)
-        all_step_data: Dict[str, List[FormField]] = {}
-
-        for step in steps:
-            step_name = step["step_name"]
-            is_current = step["is_current_step"]
-            logging.info(f"[STEP] Found: {step_name} | Current: {is_current}")
-
-            if is_current:
-                logging.info(f"→ Extracting data for current step: {step_name}")
-                form_data = await extract_all_form_fields(page)
-                all_step_data[step_name] = form_data
-                logging.info(f"→ Extracted {len(form_data)} fields from step: {step_name}")
-            else:
-                all_step_data[step_name] = []
-
-        return all_step_data
-    except Exception as e:
-        logging.error(f"Error in extract_all_steps_sequentially: {e}")
-        return {}
-
-
-# --- Utility Functions for Enhanced Error Handling ---
-
-async def _safe_get_attribute(element: Locator, attribute: str, default: str = "") -> str:
-    """Safely get an attribute from an element with fallback."""
-    try:
-        value = await element.get_attribute(attribute)
-        return value if value is not None else default
-    except Exception:
-        return default
-
-
-async def _safe_get_inner_text(element: Locator, default: str = "Unknown") -> str:
-    """Safely get inner text from an element with fallback."""
-    try:
-        if await element.count() > 0:
-            return await element.inner_text()
-        return default
-    except Exception:
-        return default
-
-
-async def _safe_click_and_extract_options(page: Page, button: Locator, option_selector: str) -> List[str]:
-    """Safely click a dropdown and extract options with error handling."""
-    try:
-        await button.click()
-        await page.wait_for_timeout(TIMEOUTS["animation_wait"])
-        options = await page.locator(option_selector).all_inner_texts()
-        await page.keyboard.press("Escape")  # Close dropdown
-        return options
-    except Exception as e:
-        logging.warning(f"Could not extract dropdown options: {e}")
-        try:
-            await page.keyboard.press("Escape")  # Ensure dropdown is closed
-        except:
-            pass
-        return []
