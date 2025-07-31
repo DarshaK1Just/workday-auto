@@ -1,27 +1,34 @@
 headless: false
 # email: "necem41440@mytaemin.com"
-email: "your550@gmail.com"
+email: "your555@gmail.com"
 password: "Workdaylab@144"
 # job_url: "https://gapinc.wd1.myworkdayjobs.com/GAPINC/job/05520-ON-280-Metro-Center/General-Manager---280-Metro-Center_R194654/"
-# job_url: "https://gapinc.wd1.myworkdayjobs.com/en-US/GAPINC/job/Sr-Analyst--Costing-Excellence--11-month-contract-_R193183?locationCountry=c4f78be1a8f14da0ab49ce1162348a5e"
+job_url: "https://gapinc.wd1.myworkdayjobs.com/en-US/GAPINC/job/Sr-Analyst--Costing-Excellence--11-month-contract-_R193183?locationCountry=c4f78be1a8f14da0ab49ce1162348a5e"
 
 # job_url: "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/Senior-DevOps-Engineer_JR1997710"
-job_url: "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/Senior-Software-Architect--GPU-Networking_JR1998985"
+# job_url: "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/Senior-Software-Architect--GPU-Networking_JR1998985"
+
+#TODO in the future
+# job_url: "https://walmart.wd5.myworkdayjobs.com/en-US/WalmartExternal/job/XMLNAME--USA--Coach-Ops-Mgr-Trainee_R-2231576-1"
+# job_url: "https://mastercard.wd1.myworkdayjobs.com/en-US/CorporateCareers/job/O'Fallon%2C-Missouri/Reliability-Engineer-I_R-253405/"
 
 step1:
-  hear_about_us: ["Job Board", "Glassdoor"]
+  # hear_about_us: ["Job Board", "Glassdoor"]
+  hear_about_us: ["In-Store", "Walk In"]
+  previous_worker: "No"
+  gm_employment: "No"
   first_name: "Darshak"
   last_name: "Patel"
   address_line1: "Nalanda"
   city: "Los Angeles"
   state: "California"
   postal_code: "90010"
-  country: "USA"
+  country: "United States of America"
+  county: "USA"
   phone_type: "Home"
   phone_number: "7759802006"
-  gm_employment: "No"
-
-# … existing keys …
+  phone_extension: "123"
+  preferred_name: "Darshak"
 
 step2:
   work_experience:
@@ -35,16 +42,6 @@ step2:
       end_year: "2023"
       description: "Working on data solutions and backend systems at Crest Data."
 
-    - job_title: "ML Engineer"
-      company: "Acme AI Labs"
-      location: "Pune"
-      currently_work_here: false
-      start_month: "06"
-      start_year: "2020"
-      end_month: "10"
-      end_year: "2023"
-      description: "Built production‑grade computer‑vision services."
-
   education:
     - school: "BITS – Hyderabad"
       school_option: "BITS - Hyderabad"
@@ -52,41 +49,30 @@ step2:
       field_of_study: "Accounting"
       grade: "8.97"
 
-    - school: "IIT Bombay"
-      school_option: "Indian Institute of Technology, Bombay"
-      degree: "MTECH"
-      field_of_study: "Animation"
-      grade: "8.4"
-
   language:
     language: "English"
     proficiency: "5 - Fluent"
 
+  certifications:
+    - number: "12345"
+      issued_date: "01/01/2023"
+      expiry_date: "01/01/2025"
+      attachment: "data/cert.pdf"
+
+  languages:
+    - language: "English"
+      fluent: "Yes"
+      comprehension: "5 - Fluent"
+      overall: "5 - Fluent"
+      reading: "5 - Fluent"
+      speaking: "5 - Fluent"
+      writing: "5 - Fluent"
+
+  websites:
+    - url: "https://yourportfolio.com"
   resume_path: "data/resume.pdf"
-
-# step2:
-#   work_experience:
-#     job_title: "Software Engineer"
-#     company: "AI Data"
-#     location: "Ahmedabad"
-#     currently_work_here: true
-#     start_month: "11"
-#     start_year: "2023"
-#     description: "Working on data solutions and backend systems at AI Data."
-
-#   education:
-#     school: "BITS"
-#     school_option: "BITS - Hyderabad"
-#     # degree: "High School"
-#     degree: "BTECH"
-#     field_of_study: "Accounting"
-#     grade: "8.97"
-
-#   language:
-#     language: "English"
-#     proficiency: "5 - Fluent"
-
-#   resume_path: "data/resume.pdf"
+  linkedin: "https://linkedin.com/in/you"
+  skills: ["Python", "SQL"]
 
 step3:
   authorization: "Yes"
@@ -104,7 +90,7 @@ step5:
   name: "Darshak Kakani"
   date:
     month: "7"
-    day: "16"
+    day: "24"
     year: "2025"
   disability_status: "No, I do not have a disability and have not had one in the past"
 
