@@ -188,17 +188,22 @@ async def fill_input_field(page: Page, field: dict, value: str | bool | list):
 
             try:
                 # Fill Month
-                await page.fill(f"input[id='{field_id}-dateSectionMonth-input']", month)
+                if month:
+                    await page.fill(f"input[id='{field_id}-dateSectionMonth-input']", month)
 
                 # Fill Year
-                await page.fill(f"input[id='{field_id}-dateSectionYear-input']", year)
+                if year:
+                    await page.fill(f"input[id='{field_id}-dateSectionYear-input']", year)
 
                 # Optional: Fill Day if present
-                if len(date_parts) == 3:
+                if len(date_parts) == 3 and day:
                     await page.fill(f"input[id='{field_id}-dateSectionDay-input']", day)
+
             except Exception as e:
-                logging.warning(f"⚠️ Date input failed for field '{field['label']}' with id '{field_id}': {e}")
- 
+                logging.warning(
+                    f"⚠️ Date input failed for field '{field.get('label', '')}' with id '{field_id}': {e}"
+                )
+
         elif field["type_of_input"] == "multiple-file" or "FileUpload" in field.get("html_content", ""):
             # Handle file uploads
             try:
@@ -299,27 +304,50 @@ async def fill_my_experience(page: Page, config: dict = CONFIG) -> bool:
 
 
         # --- CERTIFICATIONS ---
-        certs = config["step2"].get("certifications", [])
-        for i, cert in enumerate(certs):
-            print(f"🏆 Filling certification {i + 1}")
-            for field in form_fields:
-                field_id = field.get("id_of_input_component", "")
-                if field["section_name"] == "Certifications" and f"certification-" in field_id:
-                    if "certification" in field_id and "certificationNumber" not in field_id:
-                        await fill_input_field(page, field, cert.get("name", cert.get("certification", "")))
-                    elif "certificationNumber" in field_id:
-                        await fill_input_field(page, field, cert.get("number", cert.get("certificationNumber", "")))
-                    elif "issuedDate" in field_id:
-                        issued_date = cert.get("issued_date", cert.get("issuedDate", "01/01/2023"))
-                        await fill_input_field(page, field, issued_date)
-                    elif "expirationDate" in field_id:
-                        exp_date = cert.get("expiration_date", cert.get("expirationDate", "01/01/2025"))
-                        await fill_input_field(page, field, exp_date)
-                    elif "attachments" in field_id:
-                        cert_file = cert.get("file_path", cert.get("attachments"))
-                        if cert_file:
-                            await fill_input_field(page, field, cert_file)
-        await page.wait_for_timeout(2000)
+        # certs = config["step2"].get("certifications", [])
+        # for i, cert in enumerate(certs):
+        #     print(f"🏆 Filling certification {i + 1}")
+            
+        #     for field in form_fields:
+        #         field_id = field.get("id_of_input_component", "")
+        #         section = field.get("section_name", "")
+
+        #         if section != "Certifications" or "certification-" not in field_id:
+        #             continue
+
+        #         try:
+        #             if "certification" in field_id and "certificationNumber" not in field_id:
+        #                 value = cert.get("name") or cert.get("certification", "")
+        #                 await fill_input_field(page, field, value)
+
+        #             elif "certificationNumber" in field_id:
+        #                 value = cert.get("number") or cert.get("certificationNumber", "")
+        #                 await fill_input_field(page, field, value)
+
+        #             elif "issuedDate" in field_id:
+        #                 value = cert.get("issued_date") or cert.get("issuedDate", "01/01/2023")
+        #                 await fill_input_field(page, field, value)
+
+        #             elif "expirationDate" in field_id:
+        #                 value = cert.get("expiration_date") or cert.get("expirationDate", "01/01/2025")
+        #                 await fill_input_field(page, field, value)
+
+        #             elif "attachments" in field_id:
+        #                 cert_file = cert.get("file_path") or cert.get("attachments")
+        #                 if cert_file:
+        #                     try:
+        #                         # Scope to avoid strict mode violation
+        #                         cert_block = page.get_by_role("group", name=f"Certifications {i + 1}")
+        #                         file_input = cert_block.locator("input[data-automation-id='file-upload-input-ref']")
+        #                         await file_input.set_input_files(cert_file)
+        #                     except Exception as upload_error:
+        #                         logging.warning(f"⚠️ File upload failed for {field_id}: {upload_error}")
+
+        #         except Exception as e:
+        #             logging.error(f"❌ Error filling field {field_id} in Certification {i + 1}: {e}")
+
+        # await page.wait_for_timeout(2000)
+
 
         # --- LANGUAGES ---
         langs = config["step2"].get("languages", [])
