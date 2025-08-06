@@ -72,8 +72,9 @@ async def main():
                 return
             
             await page.wait_for_load_state("networkidle")
-            await page.wait_for_timeout(5000)
+            await page.wait_for_timeout(2000)
             
+            # Optional: Extract form data for debugging/analysis
             print("[INFO] Starting full application form extraction...")
             all_step_data = await extract_all_steps_sequentially(page)
             
@@ -82,27 +83,72 @@ async def main():
             
             with open("extracted_form_data.json", "w", encoding="utf-8") as f:
                 json.dump(all_step_data, f, indent=2, ensure_ascii=False)
+            
+            # Define all steps to run dynamically
+            steps = [
+                ("Step 1: My Information", fill_my_information),
+                ("Step 2: My Experience", fill_my_experience),
+                ("Step 3: Application Questions", fill_application_questions),
+                ("Step 4: Voluntary Disclosures", fill_voluntary_disclosures),
+                ("Step 5: Self Identification", fill_self_identify),
+                ("Step 6: Review & Submit", submit_review)
+            ]
 
-            # steps: list[Tuple[str, Callable[[Page], Awaitable[bool]]]] = [
-            #     ("Step 1: My Information", fill_my_information),
-            #     ("Step 2: My Experience", fill_my_experience),
-            #     ("Step 3: Application Questions", fill_application_questions),
-            #     ("Step 4: Voluntary Disclosures", fill_voluntary_disclosures),
-            #     ("Step 5: Self Identification", fill_self_identify),
-            #     ("Step 6: Review & Submit", submit_review)
-            # ]
-
-            # for name, function in steps:
-            #     if not await run_step(function, page, name):
-            #         logging.error(f"Stopping process due to failure in {name}.")
-            #         return
+            # Run all steps dynamically
+            for step_name, step_function in steps:
+                print(f"[INFO] Starting {step_name}...")
+                
+                if not await run_step(step_function, page, step_name):
+                    logging.error(f"❌ Failed to complete {step_name}.")
+                    logging.error(f"Stopping process due to failure in {step_name}.")
+                    return
+                
+                logging.info(f"✅ {step_name} completed successfully.")
+                
+                # Add a small delay between steps for stability
+                await page.wait_for_timeout(1000)
 
             logging.info("🎉🎉🎉 Job application process completed successfully! 🎉🎉🎉")
 
+        except Exception as e:
+            logging.error(f"An error occurred during the application process: {str(e)}")
+            logging.error("Traceback:", exc_info=True)
+            
         finally:
             await browser.close()
             logging.info("Browser closed.")
 
+
+async def run_step(step_function, page, step_name):
+    """
+    Generic function to run a step with error handling and logging.
+    
+    Args:
+        step_function: The async function to execute for this step
+        page: Playwright page object
+        step_name: Name of the step for logging purposes
+        
+    Returns:
+        bool: True if step completed successfully, False otherwise
+    """
+    try:
+        # Wait for page to be ready
+        await page.wait_for_load_state("networkidle")
+        
+        # Execute the step function
+        result = await step_function(page, CONFIG)
+        
+        if result:
+            logging.info(f"✅ {step_name} executed successfully.")
+            return True
+        else:
+            logging.error(f"❌ {step_name} returned False - step failed.")
+            return False
+            
+    except Exception as e:
+        logging.error(f"❌ Exception in {step_name}: {str(e)}")
+        logging.error("Traceback:", exc_info=True)
+        return False
 
 if __name__ == "__main__":
     asyncio.run(main())
