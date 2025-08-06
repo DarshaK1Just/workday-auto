@@ -142,7 +142,7 @@ async def fill_input_field(page: Page, field: dict, value: str | bool | list):
             else:
                 await locator.uncheck()
                 
-        elif field["type_of_input"] == "select" or field["type_of_input"] == "dropdown":
+        elif field["type_of_input"] == "dropdown-button" or field["type_of_input"] == "select":
             # Handle dropdown buttons (like degree, language dropdowns)
             button_locator = page.locator(f"button[id='{field_id}']")
             await button_locator.click()
@@ -273,6 +273,7 @@ async def fill_my_experience(page: Page, config: dict = CONFIG) -> bool:
 
         for i, edu in enumerate(education_entries):
             print(f"🎓 Filling education {i + 1}")
+            await page.wait_for_timeout(2000)
             
             for field in form_fields:
                 field_id = field.get("id_of_input_component")
@@ -283,7 +284,7 @@ async def fill_my_experience(page: Page, config: dict = CONFIG) -> bool:
 
                 if "school" in field_id:
                     school_value = edu.get("school_option", edu.get("school", ""))
-                    await fill_multiselect_field(page, field, school_value)
+                    await fill_input_field(page, field, school_value)
 
                 elif "degree" in field_id:
                     await fill_input_field(page, field, edu.get("degree", ""))
